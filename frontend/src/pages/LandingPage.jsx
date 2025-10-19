@@ -333,7 +333,7 @@ const LandingPage = () => {
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text'
               }}>
-                Mock Me?!
+                Mock Me? <span style={{ fontSize: '0.8em', fontWeight: '500', WebkitTextFillColor: undefined, background: 'none' }}>Yes Please</span>
               </span>
             </div>
             
@@ -580,7 +580,7 @@ const LandingPage = () => {
                 color: '#e0d5c5',
                 marginBottom: '16px'
               }}>
-                Why Choose Mock Me?!
+                Why Choose Mock Me? <span style={{ fontSize: '0.8em', fontWeight: '500' }}>Yes Please</span>
               </h2>
               <p style={{
                 fontSize: '20px',
@@ -978,7 +978,7 @@ const LandingPage = () => {
                 <span style={{
                   fontSize: '20px',
                   fontWeight: 'bold'
-                }}>Mock Me?!</span>
+                }}>Mock Me? <span style={{ fontSize: '0.8em', fontWeight: '500' }}>Yes Please</span></span>
               </div>
               <p style={{
                 color: '#9ca3af',
@@ -1100,7 +1100,7 @@ const LandingPage = () => {
             textAlign: 'center',
             color: '#9ca3af'
           }}>
-            <p>&copy; 2025 Mock Me?!. All rights reserved. Professional Interview Preparation Platform</p>
+            <p>&copy; 2025 Mock Me? <span style={{ fontSize: '0.9em', fontWeight: '500' }}>Yes Please</span>. All rights reserved. Professional Interview Preparation Platform</p>
           </div>
         </div>
       </footer>

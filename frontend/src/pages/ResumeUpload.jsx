@@ -118,7 +118,7 @@ const ResumeUpload = ({ setSessionData }) => {
             }}
             onClick={() => navigate('/')}
           >
-            Mock Me?!
+            Mock Me? <span style={{ fontSize: '0.8em', fontWeight: '500', WebkitTextFillColor: undefined, background: 'none' }}>Yes Please</span>
           </div>
           
           <div style={{
@@ -603,7 +603,7 @@ const ResumeUpload = ({ setSessionData }) => {
         marginTop: '4rem',
       }}>
         <p style={{ margin: 0, opacity: 0.8 }}>
-          © 2025 Mock Me?!. Professional Interview Preparation Platform
+          © 2025 Mock Me? <span style={{ fontSize: '0.9em', fontWeight: '500' }}>Yes Please</span>. Professional Interview Preparation Platform
         </p>
       </footer>
 

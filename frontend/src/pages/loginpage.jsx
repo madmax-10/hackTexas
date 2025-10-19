@@ -111,7 +111,7 @@ const LoginPage = () => {
             backgroundClip: 'text',
             marginBottom: '8px'
           }}>
-            Mock Me?!
+            Mock Me? <span style={{ fontSize: '0.8em', fontWeight: '500', WebkitTextFillColor: undefined, background: 'none' }}>Yes Please</span>
           </div>
           <div style={{color: '#e0d5c5', fontSize: '16px'}}>
             {mode === 'login' ? 'Sign in to continue' : 'Create your account'}

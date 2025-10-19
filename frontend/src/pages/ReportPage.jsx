@@ -176,7 +176,7 @@ function ReportPage({ sessionData }) {
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text'
             }}>
-              Mock Me?!
+              Mock Me? <span style={{ fontSize: '0.8em', fontWeight: '500', WebkitTextFillColor: undefined, background: 'none' }}>Yes Please</span>
             </span>
           </div>
           
@@ -651,7 +651,7 @@ function ReportPage({ sessionData }) {
         marginTop: '40px'
       }}>
         <p style={{margin: 0, fontSize: '14px'}}>
-          © 2025 Mock Me?!. Professional Interview Preparation Platform
+          © 2025 Mock Me? <span style={{ fontSize: '0.9em', fontWeight: '500' }}>Yes Please</span>. Professional Interview Preparation Platform
         </p>
       </footer>
     </div>

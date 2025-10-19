@@ -78,3 +78,9 @@ langchain-google-genai>=2.0.0
 
 # Pydantic for data validation
 pydantic>=2.0.0
+
+# Production dependencies
+whitenoise==6.6.0
+gunicorn==21.2.0
+redis==5.0.1
+django-redis==5.4.0
