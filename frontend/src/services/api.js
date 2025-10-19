@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Use environment variable if available, otherwise fallback to localhost
-const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || 'http://localhost:8000/api';
+// Use environment variable if available, otherwise fallback to production backend URL
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || 'https://hackbackend-551n.onrender.com/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

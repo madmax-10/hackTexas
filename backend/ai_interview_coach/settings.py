@@ -34,7 +34,7 @@ DEBUG = not IS_PRODUCTION
 if IS_PRODUCTION:
     ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
     if not ALLOWED_HOSTS or ALLOWED_HOSTS == ['']:
-        ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+        ALLOWED_HOSTS = ['hackbackend-551n.onrender.com', 'localhost', '127.0.0.1']
 else:
     ALLOWED_HOSTS = ['*']
 
@@ -226,11 +226,10 @@ if IS_PRODUCTION:
     CSRF_COOKIE_SECURE = True
     
     # CORS settings for production
-    CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='').split(',')
+    CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='https://hack-texas-nine.vercel.app').split(',')
     if not CORS_ALLOWED_ORIGINS or CORS_ALLOWED_ORIGINS == ['']:
         CORS_ALLOWED_ORIGINS = [
-            "https://yourdomain.com",
-            "https://www.yourdomain.com",
+            "https://hack-texas-nine.vercel.app",
         ]
     
     # Logging configuration
