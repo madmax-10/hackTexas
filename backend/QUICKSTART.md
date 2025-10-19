@@ -4,7 +4,7 @@
 
 ### **1. Activate Virtual Environment**
 ```bash
-source venv/bin/activate
+source .venv/bin/activate
 ```
 
 ### **2. Start Redis (Required for WebSocket)**

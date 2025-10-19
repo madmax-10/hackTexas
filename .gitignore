@@ -1,16 +1,15 @@
 # Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
-ENV/
-*.egg-info/
-dist/
-build/
-
+backend/.venv/
+backend/venv/
+backend/env/
+backend/ENV/
+backend/*.egg-info/
+backend/dist/
+backend/build/
+**/__pycache__/
+*.pyc
+*.pyo
+.gitignore
 # Django
 *.log
 db.sqlite3
@@ -41,3 +40,14 @@ htmlcov/
 # Temporary files
 *.tmp
 test_resume.jpg
+
+# Redis
+dump.rdb
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+frontend/.env.local
+frontend/.eslintcache

@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 from decouple import config
+from dotenv import load_dotenv
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -40,13 +42,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'channels',
+    'corsheaders',
     'api',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -72,18 +75,32 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'ai_interview_coach.wsgi.application'
-ASGI_APPLICATION = 'ai_interview_coach.asgi.application'
 
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Database configuration
+# Use SQLite for development, PostgreSQL for production
+import dj_database_url
+import os
+
+# Check if we're in production (you can set this via environment variable)
+if os.getenv('DJANGO_ENV') == 'production':
+    # Production: Use PostgreSQL
+    DATABASES = {
+        'default': dj_database_url.parse(
+            os.getenv('DATABASE_URL', 'postgresql://user:password@localhost:5432/ai_interview_coach')
+        )
     }
-}
+else:
+    # Development: Use SQLite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -134,6 +151,10 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Gemini API Configuration
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 
+# Eleven Labs API Configuration
+ELEVEN_LABS_API_KEY = config('ELEVEN_LABS_API_KEY', default='')
+ELEVEN_LABS_VOICE_ID = config('ELEVEN_LABS_VOICE_ID', default='21m00Tcm4TlvDq8ikWAM')  # Default voice: Rachel
+
 # REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
@@ -146,15 +167,31 @@ REST_FRAMEWORK = {
     ],
 }
 
-# Channels Configuration
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],
-        },
-    },
-}
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
-# WebSocket Configuration
-WEBSOCKET_URL = '/ws/'
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]

@@ -4,3 +4,7 @@ DEBUG=True
 
 # Gemini API Configuration
 GEMINI_API_KEY=your-gemini-api-key-here
+
+# Eleven Labs API Configuration (for text-to-speech)
+ELEVEN_LABS_API_KEY=your-elevenlabs-api-key-here
+ELEVEN_LABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM  # Default: Rachel voice
