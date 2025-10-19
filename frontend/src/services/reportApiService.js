@@ -1,5 +1,7 @@
 // Report API Service for interacting with backend database
-const API_BASE_URL = 'http://localhost:8000/api';
+// const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || 'https://hackbackend-551n.onrender.com/api';
+
 
 class ReportApiService {
   constructor() {
