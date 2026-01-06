@@ -13,11 +13,21 @@ import logging
 from typing import Optional, Tuple
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from django.conf import settings
 from google import genai
 from google.genai import types
 
 logger = logging.getLogger(__name__)
+
+# ==================== Constants ====================
+SMTP_SERVER = 'smtp.gmail.com'
+SMTP_PORT = 465
+SMTP_TIMEOUT = 30
+DEFAULT_RECRUITER_NAME = 'Ritiz'
+DEFAULT_MEETING_LINK = 'https://calendly.com/ritiz'
+GEMINI_MODEL = 'gemini-2.0-flash-exp'
+GEMINI_TEMPERATURE = 0.7
+DEFAULT_STRENGTHS_FALLBACK = 'Strong fundamentals'
+SUBJECT_FALLBACK_TEMPLATE = "Exciting Opportunity - {position} Role"
 
 class EmailService:
     """Service for sending recruitment emails using Gemini AI and Gmail SMTP."""
@@ -26,10 +36,8 @@ class EmailService:
         self.gemini_api_key = os.getenv('GEMINI_API_KEY')
         self.sender_email = os.getenv('SENDER_EMAIL')
         self.sender_password = os.getenv('SENDER_PASS')
-        self.recruiter_name = os.getenv('RECRUITER_NAME', 'Ritiz')
-        self.meeting_link = os.getenv('MEETING_LINK', 'https://calendly.com/ritiz')
-        
-        # Gemini client will be created per request in draft function
+        self.recruiter_name = os.getenv('RECRUITER_NAME', DEFAULT_RECRUITER_NAME)
+        self.meeting_link = os.getenv('MEETING_LINK', DEFAULT_MEETING_LINK)
     
     def is_configured(self) -> bool:
         """Check if email service is properly configured."""
@@ -39,6 +47,58 @@ class EmailService:
             self.sender_password
         ])
     
+    def _build_profile_data(self, position: str, report_data: dict) -> str:
+        """Build candidate profile text from report data."""
+        strengths = report_data.get('strengths') or []
+        assessment = report_data.get('overall_assessment') or ''
+        strengths_text = ', '.join(strengths[:3]) if strengths else DEFAULT_STRENGTHS_FALLBACK
+        return f"Role: {position}\nAssessment: {assessment}\nStrengths: {strengths_text}"
+    
+    def _get_email_schema(self) -> types.Schema:
+        """Get the JSON schema for email generation."""
+        return types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "subject": types.Schema(
+                    type=types.Type.STRING,
+                    description="A concise, personalized subject line for a job opportunity (max 100 chars).",
+                ),
+                "body": types.Schema(
+                    type=types.Type.STRING,
+                    description="Professional email body with greeting, skills acknowledgment, purpose, and call-to-action with meeting link.",
+                ),
+            },
+            required=["subject", "body"],
+        )
+    
+    def _enforce_greeting_and_opening(self, body_text: str, greeting: str, opening: str) -> str:
+        """Enforce specific greeting and opening in email body."""
+        lines = body_text.splitlines()
+        
+        # Find first non-empty line and replace with greeting
+        i = 0
+        while i < len(lines) and not lines[i].strip():
+            i += 1
+        
+        if i < len(lines):
+            lines[i] = greeting
+        else:
+            lines = [greeting]
+        
+        # Insert opening if provided
+        if opening:
+            j = i + 1
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            
+            if j < len(lines):
+                if not lines[j].strip().lower().startswith(opening.lower()):
+                    lines.insert(j, opening)
+            else:
+                lines.append(opening)
+        
+        return "\n".join(lines)
+    
     def draft_email_with_gemini(
         self, 
         candidate_name: str, 
@@ -47,7 +107,7 @@ class EmailService:
         report_data: dict
     ) -> Optional[dict]:
         """
-        Use Gemini AI to draft a personalized recruitment email (mirrors send_email.py).
+        Use Gemini AI to draft a personalized recruitment email.
         Returns a dict with 'subject' and 'body' or None on failure.
         """
         if not self.gemini_api_key:
@@ -55,40 +115,15 @@ class EmailService:
             return None
 
         try:
-            # Build candidate profile text from report data
-            strengths = report_data.get('strengths') or []
-            assessment = report_data.get('overall_assessment') or ''
-            profile_data = (
-                f"Role: {position}\n"
-                f"Assessment: {assessment}\n"
-                f"Strengths: {', '.join(strengths[:3]) if strengths else 'Strong fundamentals'}"
-            )
-
-            # Define the JSON schema for structured output
-            email_schema = types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "subject": types.Schema(
-                        type=types.Type.STRING,
-                        description="A concise, personalized subject line for a job opportunity (max 100 chars).",
-                    ),
-                    "body": types.Schema(
-                        type=types.Type.STRING,
-                        description="Professional email body with greeting, skills acknowledgment, purpose, and call-to-action with meeting link.",
-                    ),
-                },
-                required=["subject", "body"],
-            )
-
-            # Required greeting and opening
+            profile_data = self._build_profile_data(position, report_data)
+            email_schema = self._get_email_schema()
+            
             forced_greeting = f"Hy {candidate_name},"
             forced_opening = (
                 f"I saw your mock interview using our AI in {position} role. We think you are the best candidate that we want."
                 if position else ""
             )
 
-            # Craft the prompt
-            link = self.meeting_link or "https://calendly.com/ritiz"
             prompt = f"""
             You are a professional technical recruiter named '{self.recruiter_name}'.
 
@@ -102,7 +137,7 @@ class EmailService:
             1. Use a friendly yet professional tone
             2. Acknowledge their specific skills and experience mentioned in the profile
             3. Clearly state this is for an exciting opportunity/role discussion
-            4. Include the meeting scheduling link: {link}
+            4. Include the meeting scheduling link: {self.meeting_link}
             5. Keep the subject line under 100 characters
             6. Keep the email concise (3-4 short paragraphs)
             7. Use proper email formatting with greeting and sign-off
@@ -113,46 +148,27 @@ class EmailService:
             Return ONLY a valid JSON object matching the schema (no markdown, no extra text).
             """
 
-            # Generate content with Gemini using the new client API
             logger.info("📡 Calling Gemini API...")
             client = genai.Client(api_key=self.gemini_api_key)
             response = client.models.generate_content(
-                model='gemini-2.0-flash-exp',
+                model=GEMINI_MODEL,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     response_schema=email_schema,
-                    temperature=0.7,
+                    temperature=GEMINI_TEMPERATURE,
                 ),
             )
 
-            # Parse JSON and enforce greeting/opening
             draft_data = json.loads(response.text)
-            body_text = draft_data.get('body', '').strip()
-            lines = body_text.splitlines()
-            i = 0
-            while i < len(lines) and not lines[i].strip():
-                i += 1
-            if i < len(lines):
-                lines[i] = forced_greeting
-            else:
-                lines = [forced_greeting]
-            if forced_opening:
-                j = i + 1
-                while j < len(lines) and not lines[j].strip():
-                    j += 1
-                if j < len(lines):
-                    if not lines[j].strip().lower().startswith(forced_opening.lower()):
-                        lines.insert(j, forced_opening)
-                else:
-                    lines.append(forced_opening)
-            body_text = "\n".join(lines)
-
-            subject_text = draft_data.get('subject', '').strip() or f"Exciting Opportunity - {position} Role"
-            return {
-                'subject': subject_text,
-                'body': body_text,
-            }
+            body_text = self._enforce_greeting_and_opening(
+                draft_data.get('body', '').strip(),
+                forced_greeting,
+                forced_opening
+            )
+            subject_text = draft_data.get('subject', '').strip() or SUBJECT_FALLBACK_TEMPLATE.format(position=position)
+            
+            return {'subject': subject_text, 'body': body_text}
 
         except json.JSONDecodeError as e:
             logger.error(f"❌ Failed to parse Gemini response as JSON: {e}")
@@ -161,6 +177,22 @@ class EmailService:
         except Exception as e:
             logger.error(f"❌ Error drafting email with Gemini: {type(e).__name__}: {e}")
             return None
+    
+    def _create_email_message(self, subject: str, body: str, to_email: str) -> MIMEMultipart:
+        """Create an email message with subject, body, and recipient."""
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = self.sender_email
+        msg['To'] = to_email
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        return msg
+    
+    def _send_via_smtp(self, message: MIMEMultipart, recipient: str) -> None:
+        """Send email via Gmail SMTP."""
+        context = ssl.create_default_context(cafile=certifi.where())
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context, timeout=SMTP_TIMEOUT) as server:
+            server.login(self.sender_email, self.sender_password)
+            server.sendmail(self.sender_email, [recipient], message.as_string())
     
     def send_email(
         self, 
@@ -184,30 +216,17 @@ class EmailService:
         if not self.is_configured():
             return False, "Email service not configured. Missing environment variables."
         
-        # Draft the email
         draft = self.draft_email_with_gemini(candidate_name, candidate_email, position, report_data)
         if not draft:
             return False, "Failed to draft email"
         
         try:
-            # Create email message
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = draft['subject']
-            msg['From'] = self.sender_email
-            msg['To'] = candidate_email
+            msg = self._create_email_message(draft['subject'], draft['body'], candidate_email)
+            self._send_via_smtp(msg, candidate_email)
             
-            # Attach the body
-            msg.attach(MIMEText(draft['body'], 'plain', 'utf-8'))
-            
-            # Send via Gmail SMTP (use certifi CA bundle to avoid macOS cert issues)
-            context = ssl.create_default_context(cafile=certifi.where())
-            
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context, timeout=30) as server:
-                server.login(self.sender_email, self.sender_password)
-                server.sendmail(self.sender_email, [candidate_email], msg.as_string())
-            
-            logger.info(f"✅ Email sent successfully to {candidate_email}")
-            return True, f"Email sent successfully to {candidate_email}"
+            success_msg = f"Email sent successfully to {candidate_email}"
+            logger.info(f"✅ {success_msg}")
+            return True, success_msg
             
         except smtplib.SMTPAuthenticationError:
             error_msg = "SMTP Authentication failed. Check SENDER_EMAIL and SENDER_PASS"

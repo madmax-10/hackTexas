@@ -11,6 +11,14 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not found in .env")
 
+# ==================== Constants ====================
+DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_TEMPERATURE = 0.4
+DEFAULT_TOTAL_QUESTIONS = 5
+DEFAULT_HINT_FALLBACK = "Think aloud and outline your approach; consider key trade-offs relevant to the role."
+
+# ==================== Helper Functions ====================
+
 def _safe_json(text: str) -> Dict[str, Any]:
     t = text.strip()
     if t.startswith("```"):
@@ -29,11 +37,10 @@ def _safe_json(text: str) -> Dict[str, Any]:
             return json.loads(t[start:end+1])
         raise
 
-# ====================
-# Text-Based Interview Service
-# ====================
+# ==================== Interview Service ====================
+
 class InterviewLLMService:
-    def __init__(self, model: str = "gemini-2.5-flash", temperature: float = 0.4, total_questions: int = 5):
+    def __init__(self, model: str = DEFAULT_MODEL, temperature: float = DEFAULT_TEMPERATURE, total_questions: int = DEFAULT_TOTAL_QUESTIONS):
         self.llm = ChatGoogleGenerativeAI(
             model=model,
             api_key=GEMINI_API_KEY,
@@ -49,6 +56,32 @@ class InterviewLLMService:
         self.resume_text = resume_text
         self.role = role
         self.chat_history = []
+    
+    def _build_history_string(self) -> str:
+        """Build formatted history string from chat history."""
+        return "\n".join([
+            f"Q{i+1}: {item['question']}\nA{i+1}: {item.get('answer', 'N/A')}"
+            for i, item in enumerate(self.chat_history)
+        ])
+    
+    def _invoke_llm(self, prompt: ChatPromptTemplate, **kwargs) -> Dict[str, Any]:
+        """Invoke LLM with prompt and return parsed JSON response."""
+        messages = prompt.format_messages(**kwargs)
+        resp = self.llm.invoke(messages)
+        return _safe_json(resp.content)
+    
+    def _add_question_to_history(self, question_data: Dict[str, Any]):
+        """Add question data to chat history."""
+        self.chat_history.append({
+            "question": question_data["question"],
+            "type": question_data["type"],
+            "difficulty": question_data["difficulty"]
+        })
+    
+    def _update_last_answer(self, answer: str, evaluation: Dict[str, Any]):
+        """Update the last question with answer and evaluation."""
+        self.chat_history[-1]["answer"] = answer
+        self.chat_history[-1]["evaluation"] = evaluation
 
     def generate_first_question(self) -> Dict[str, Any]:
         """Generate the first tailored interview question"""
@@ -76,16 +109,8 @@ Candidate Profile:
 {profile}""")
         ])
 
-        messages = prompt.format_messages(role=self.role, profile=self.resume_text)
-        resp = self.llm.invoke(messages)
-        data = _safe_json(resp.content)
-        
-        self.chat_history.append({
-            "question": data["question"],
-            "type": data["type"],
-            "difficulty": data["difficulty"]
-        })
-        
+        data = self._invoke_llm(prompt, role=self.role, profile=self.resume_text)
+        self._add_question_to_history(data)
         return data
 
     # ------------- Interactive helpers -------------
@@ -125,8 +150,7 @@ Role: {role}
 """)
         ])
 
-        resp = self.llm.invoke(prompt.format_messages(q=last_q, role=self.role))
-        data = _safe_json(resp.content)
+        data = self._invoke_llm(prompt, q=last_q, role=self.role)
         return data.get("rephrased_question", last_q)
 
     def hint_for_current_question(self) -> str:
@@ -150,11 +174,8 @@ Question: {q}
 """)
         ])
 
-        resp = self.llm.invoke(
-            prompt.format_messages(role=self.role, resume=self.resume_text, q=last_q)
-        )
-        data = _safe_json(resp.content)
-        return data.get("hint", "Think aloud and outline your approach; consider key trade-offs relevant to the role.")
+        data = self._invoke_llm(prompt, role=self.role, resume=self.resume_text, q=last_q)
+        return data.get("hint", DEFAULT_HINT_FALLBACK)
 
     def evaluate_and_get_next_question(self, user_answer: str, generate_next: bool = True) -> Dict[str, Any]:
         """Evaluate the latest answer and optionally generate the next adaptive question.
@@ -169,11 +190,7 @@ Question: {q}
             raise ValueError("No previous question found. Call generate_first_question() first")
 
         last_q = self.chat_history[-1]
-
-        history_str = "\n".join([
-            f"Q{i+1}: {item['question']}\nA{i+1}: {item.get('answer', 'N/A')}"
-            for i, item in enumerate(self.chat_history)
-        ])
+        history_str = self._build_history_string()
 
         if generate_next:
             prompt = ChatPromptTemplate.from_messages([
@@ -216,29 +233,19 @@ Return ONLY valid JSON:
 }}""")
             ])
 
-            messages = prompt.format_messages(
+            result = self._invoke_llm(
+                prompt,
                 role=self.role,
                 resume=self.resume_text,
                 history=history_str,
                 latest_q=last_q["question"],
                 latest_a=user_answer,
             )
-            resp = self.llm.invoke(messages)
-            result = _safe_json(resp.content)
 
-            # Update history with answer and evaluation for the last question
-            self.chat_history[-1]["answer"] = user_answer
-            self.chat_history[-1]["evaluation"] = result["evaluation"]
-
-            # Append the next question for the following turn
-            self.chat_history.append({
-                "question": result["next_question"]["question"],
-                "type": result["next_question"]["type"],
-                "difficulty": result["next_question"]["difficulty"]
-            })
+            self._update_last_answer(user_answer, result["evaluation"])
+            self._add_question_to_history(result["next_question"])
             return result
         else:
-            # Only evaluate, do not generate a next question
             prompt = ChatPromptTemplate.from_messages([
                 ("system", "You are a senior interviewer. Evaluate answers precisely and provide a brief coaching tip, without revealing full solutions."),
                 ("human", """Context:
@@ -264,20 +271,16 @@ Evaluate the latest answer with a brief JSON:
 }}""")
             ])
 
-            messages = prompt.format_messages(
+            result = self._invoke_llm(
+                prompt,
                 role=self.role,
                 resume=self.resume_text,
                 history=history_str,
                 latest_q=last_q["question"],
                 latest_a=user_answer,
             )
-            resp = self.llm.invoke(messages)
-            result = _safe_json(resp.content)
 
-            # Update history with answer and evaluation only
-            self.chat_history[-1]["answer"] = user_answer
-            self.chat_history[-1]["evaluation"] = result["evaluation"]
-
+            self._update_last_answer(user_answer, result["evaluation"])
             return result
 
     # ------------- Web-friendly helpers -------------
@@ -302,7 +305,7 @@ Evaluate the latest answer with a brief JSON:
         return {"role": self.role, "resume_text": self.resume_text, "chat_history": self.chat_history}
 
     @staticmethod
-    def from_dict(state: Dict[str, Any], model: str = "gemini-2.5-flash", temperature: float = 0.4) -> "InterviewLLMService":
+    def from_dict(state: Dict[str, Any], model: str = DEFAULT_MODEL, temperature: float = DEFAULT_TEMPERATURE) -> "InterviewLLMService":
         svc = InterviewLLMService(model=model, temperature=temperature)
         svc.role = state.get("role")
         svc.resume_text = state.get("resume_text")
@@ -340,13 +343,7 @@ Provide a comprehensive analysis in JSON format:
 }}""")
         ])
         
-        messages = prompt.format_messages(
-            role=self.role,
-            resume=self.resume_text,
-            transcript=transcript
-        )
-        resp = self.llm.invoke(messages)
-        return _safe_json(resp.content)
+        return self._invoke_llm(prompt, role=self.role, resume=self.resume_text, transcript=transcript)
 
 
 

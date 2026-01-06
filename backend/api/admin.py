@@ -1,30 +1,44 @@
 from django.contrib import admin
-from .models import Demo, InterviewSession
+from .models import JobDescription, InterviewReport
 
-@admin.register(Demo)
-class DemoAdmin(admin.ModelAdmin):
-    list_display = ['title', 'description', 'created_at']
+@admin.register(JobDescription)
+class JobDescriptionAdmin(admin.ModelAdmin):
+    list_display = ['id', 'title', 'created_at']
     list_filter = ['created_at']
     search_fields = ['title', 'description']
+    readonly_fields = ['id', 'created_at']
+    ordering = ['-created_at']
 
-@admin.register(InterviewSession)
-class InterviewSessionAdmin(admin.ModelAdmin):
-    list_display = ['id', 'demo', 'created_at', 'has_questions', 'has_answers', 'has_report']
-    list_filter = ['demo', 'created_at']
-    search_fields = ['demo__title']
-    readonly_fields = ['id', 'created_at', 'updated_at']
+@admin.register(InterviewReport)
+class InterviewReportAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'candidate_name', 'position', 'job_description', 
+        'overall_score', 'overall_rating', 'decision', 'interview_date', 'created_at'
+    ]
+    list_filter = ['decision', 'overall_rating', 'job_description', 'interview_date', 'created_at']
+    search_fields = ['candidate_name', 'candidate_email', 'position', 'job_description__title']
+    readonly_fields = ['id', 'created_at', 'updated_at', 'interview_date']
+    ordering = ['-created_at']
     
-    def has_questions(self, obj):
-        return bool(obj.questions)
-    has_questions.boolean = True
-    has_questions.short_description = 'Has Questions'
-    
-    def has_answers(self, obj):
-        return bool(obj.answers)
-    has_answers.boolean = True
-    has_answers.short_description = 'Has Answers'
-    
-    def has_report(self, obj):
-        return bool(obj.report)
-    has_report.boolean = True
-    has_report.short_description = 'Has Report'
+    fieldsets = (
+        ('Job Information', {
+            'fields': ('job_description', 'position')
+        }),
+        ('Candidate Information', {
+            'fields': ('candidate_name', 'candidate_email', 'resume_text')
+        }),
+        ('Interview Results', {
+            'fields': ('overall_score', 'overall_rating', 'decision', 'strengths', 'areas_for_improvement')
+        }),
+        ('Interview Data', {
+            'fields': ('conversation', 'behavioral_report', 'report_data'),
+            'classes': ('collapse',)
+        }),
+        ('DSA Interview', {
+            'fields': ('dsa_question', 'dsa_pseudocode', 'dsa_session_idx', 'dsa_report'),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('id', 'interview_date', 'created_at', 'updated_at')
+        }),
+    )

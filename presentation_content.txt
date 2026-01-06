@@ -1,0 +1,201 @@
+# AI Interview Coach - PowerPoint Presentation Content (10 Slides)
+
+## Slide 1: Title Slide
+**Mock Me? Yes Please**
+*AI-Powered Interview Preparation Platform*
+
+**Subtitle:** Revolutionizing Interview Practice with Artificial Intelligence
+
+**Presented by:** [Your Name/Team]
+**Date:** [Current Date]
+**Event:** [Hackathon Name]
+
+---
+
+## Slide 2: Problem Statement
+**The Challenge:**
+- 73% of job seekers struggle with interview anxiety
+- Traditional mock interviews are expensive and time-consuming
+- Lack of personalized feedback and practice opportunities
+- Difficulty in accessing industry-specific interview questions
+- No real-time evaluation and improvement suggestions
+
+**Market Gap:**
+- Limited AI-powered interview coaching platforms
+- High demand for accessible interview preparation tools
+
+---
+
+## Slide 3: Solution Overview
+**Mock Me? Yes Please - Our Solution:**
+- AI-powered mock interview platform
+- Real-time question generation and evaluation
+- Personalized feedback and improvement suggestions
+- Industry-specific interview questions
+- Accessible and affordable interview practice
+
+**Key Features:**
+- AI Interview Coach with voice interaction
+- DSA (Data Structures & Algorithms) practice
+- Recruiter dashboard for candidate evaluation
+- Comprehensive interview reports
+
+---
+
+## Slide 4: Technology Stack
+**Backend:**
+- Django + Django REST Framework
+- Google Gemini AI for question generation
+- ElevenLabs for text-to-speech
+- SQLite/PostgreSQL database
+- Email service integration
+
+**Frontend:**
+- React.js with Vite
+- Tailwind CSS for styling
+- Camera integration for video interviews
+- Responsive design
+
+**AI & ML:**
+- Google Gemini AI for intelligent question generation
+- Natural language processing for evaluation
+- Machine learning for personalized recommendations
+
+---
+
+## Slide 5: Key Features
+**1. AI Interview Coach**
+- Voice-based interview practice
+- Real-time question generation
+- Intelligent follow-up questions
+- Natural conversation flow
+
+**2. DSA Practice**
+- Algorithm and data structure questions
+- Multiple difficulty levels
+- Code evaluation and feedback
+- Progress tracking
+
+**3. Recruiter Dashboard**
+- Candidate evaluation tools
+- Interview session management
+- Performance analytics
+- Report generation
+
+---
+
+## Slide 6: User Experience
+**For Job Seekers:**
+- Easy-to-use interface
+- Personalized interview practice
+- Real-time feedback and suggestions
+- Progress tracking and improvement tips
+
+**For Recruiters:**
+- Comprehensive candidate evaluation
+- Detailed interview reports
+- Performance analytics
+- Easy candidate management
+
+**Accessibility:**
+- Mobile-responsive design
+- Voice and text interaction options
+- Multi-language support (planned)
+
+---
+
+## Slide 7: Technical Architecture
+**System Architecture:**
+- Microservices-based design
+- RESTful API endpoints
+- Real-time communication
+- Scalable cloud infrastructure
+
+**Security & Privacy:**
+- Data encryption and secure storage
+- GDPR compliance
+- User privacy protection
+- Secure authentication
+
+**Performance:**
+- Fast response times
+- Efficient AI processing
+- Optimized database queries
+- Caching mechanisms
+
+---
+
+## Slide 8: Market Opportunity
+**Target Market:**
+- Job seekers and career changers
+- HR professionals and recruiters
+- Educational institutions
+- Corporate training programs
+
+**Market Size:**
+- Global online education market: $350+ billion
+- Interview preparation market: $2.5+ billion
+- Growing demand for AI-powered solutions
+
+**Competitive Advantage:**
+- Advanced AI integration
+- Comprehensive evaluation system
+- User-friendly interface
+- Affordable pricing model
+
+---
+
+## Slide 9: Business Model
+**Revenue Streams:**
+- Freemium model with premium features
+- Corporate subscriptions for recruiters
+- Educational institution partnerships
+- API licensing for third-party integrations
+
+**Pricing Strategy:**
+- Free tier with basic features
+- Premium subscription for advanced features
+- Enterprise solutions for large organizations
+- Pay-per-use model for occasional users
+
+**Growth Strategy:**
+- User acquisition through partnerships
+- Content marketing and SEO
+- Social media engagement
+- Referral programs
+
+---
+
+## Slide 10: Future Roadmap
+**Phase 1 (Current):**
+- Core interview practice features
+- Basic AI integration
+- User authentication and profiles
+
+**Phase 2 (Next 6 months):**
+- Advanced AI capabilities
+- Mobile app development
+- Enhanced analytics and reporting
+
+**Phase 3 (Next 12 months):**
+- Multi-language support
+- Advanced video analysis
+- Integration with job boards
+- Corporate training modules
+
+**Long-term Vision:**
+- Global expansion
+- AI-powered career guidance
+- Industry-specific interview modules
+- Advanced analytics and insights
+
+---
+
+## Additional Notes for Presenters:
+- Keep slides concise and visual
+- Use charts and diagrams where possible
+- Practice the demo thoroughly
+- Prepare for technical questions
+- Highlight the AI and innovation aspects
+- Emphasize the user experience and benefits
+- Be ready to discuss scalability and future plans

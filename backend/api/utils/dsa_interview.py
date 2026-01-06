@@ -8,20 +8,166 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("Missing GEMINI_API_KEY")
 
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    api_key=GEMINI_API_KEY,
-    temperature=0.7
-)
+# ==================== Constants ====================
+DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_TEMPERATURE = 0.7
+DEFAULT_ROLE = "general"
+DEFAULT_DIFFICULTY = "medium"
+TRIVIAL_PSEUDOCODE_LENGTH = 10
+DEFAULT_SESSION_LOG_PATH = "session_logs.jsonl"
 
-# In-memory store for hidden analyses and conversations
-ANALYSIS_LOG = []
-
-# Global candidate exit phrases for use in reporting and runtime checks
+# Candidate phrases
 CANDIDATE_EXIT_PHRASES = [
     "exit", "quit", "bye", "goodbye", "give up", "i give up", "can't solve", "cannot solve",
     "stuck", "don't know", "do not know", "not sure", "stop", "end interview"
 ]
+
+CANDIDATE_CONFIDENCE_PHRASES = [
+    "yeah now i can", "i can solve", "i can do it", "i got it", "i understand now",
+    "clear now", "makes sense now", "i can solve it now"
+]
+
+CANDIDATE_COMPLETION_PHRASES = [
+    "i am done", "i'm done", "done", "completed", "that's it", "that is it",
+    "finished", "i'm finished", "i am finished", "all done", "i'm all done"
+]
+
+INTERVIEWER_CLOSE_PHRASES = [
+    "good job", "well done", "thank you", "excellent work", "that's all", "great work",
+    "this concludes", "we're done", "no further questions", "end of interview", "goodbye", "bye"
+]
+
+# Closing messages
+CLOSING_CANDIDATE_GIVEUP = "Understood. We'll wrap up here. Thank you for your time and effort today."
+CLOSING_CANDIDATE_CONFIDENT = "Great! I'm glad things are clearer now. Thank you for working through this with me."
+CLOSING_CANDIDATE_COMPLETED = "Excellent! Thank you for completing the pseudocode analysis. We'll wrap up here."
+
+# Default analysis structure
+DEFAULT_HIDDEN_ANALYSIS = {
+    "approach_summary": "",
+    "time_complexity": "",
+    "space_complexity": "",
+    "classification": "unclear",
+    "potential_improvements": [],
+    "edge_cases": []
+}
+
+# ==================== Global State ====================
+llm = ChatGoogleGenerativeAI(
+    model=DEFAULT_MODEL,
+    api_key=GEMINI_API_KEY,
+    temperature=DEFAULT_TEMPERATURE
+)
+
+ANALYSIS_LOG = []
+
+# ==================== Helper Functions ====================
+
+def _safe_json(text: str):
+    """Safely parse JSON from text, handling markdown code blocks."""
+    t = text.strip()
+    if t.startswith("```"):
+        parts = t.split("```")
+        if len(parts) >= 3:
+            t = parts[1]
+        else:
+            t = t.strip("`")
+    try:
+        return json.loads(t)
+    except:
+        start = t.find("{")
+        end = t.rfind("}")
+        if start != -1 and end != -1:
+            return json.loads(t[start:end+1])
+        raise
+
+def _create_hidden_analysis(question_json: str, problem_statement: str, pseudocode: str) -> dict:
+    """Create hidden backend analysis of pseudocode."""
+    hidden_prompt = f"""
+You are analyzing a candidate's pseudocode for the following problem. Produce STRICT JSON only.
+
+Question JSON:
+{question_json}
+
+Problem Statement:
+{problem_statement}
+
+Candidate Pseudocode:
+{pseudocode}
+
+Return ONLY valid JSON with keys:
+{{
+  "approach_summary": "string",
+  "time_complexity": "string",
+  "space_complexity": "string",
+  "classification": "brute-force|optimized|unclear",
+  "potential_improvements": ["string", "string"],
+  "edge_cases": ["string", "string"]
+}}
+"""
+
+    hidden_messages = [
+        ("system", "You are a precise algorithm evaluator. Output only valid JSON."),
+        ("human", hidden_prompt),
+    ]
+    try:
+        hidden_resp = llm.invoke(hidden_messages)
+        return _safe_json(getattr(hidden_resp, "content", str(hidden_resp)))
+    except Exception:
+        return DEFAULT_HIDDEN_ANALYSIS.copy()
+
+def _create_interviewer_prompt(question_json: str, problem_statement: str, pseudocode: str) -> str:
+    """Create interviewer prompt for pseudocode evaluation."""
+    return f"""
+You are a DSA interviewer evaluating a candidate's pseudocode for the following problem.
+
+Full Question (from generator, JSON):
+{question_json}
+
+Problem Statement (reference):
+{problem_statement}
+
+Candidate's Pseudocode:
+{pseudocode}
+
+Your tasks:
+1) First turn (no candidate reply yet): Ask ONE concise follow-up question. Do NOT reveal any analysis.
+2) Subsequent turns (after the candidate replies): Start with a brief, specific acknowledgment reflecting their last answer (1-2 short sentences), THEN ask exactly ONE follow-up question that ties directly to their response. Do NOT reveal any hidden analysis.
+3) Continue until you feel the candidate has fully addressed concerns, then end with a supportive closing statement.
+Output constraints: On each turn, output ONLY one compact message that is either (a) acknowledgment + one follow-up question, or (b) a closing statement. No extra commentary, no analysis.
+"""
+
+def _reconstruct_messages(session_messages: list) -> list:
+    """Reconstruct LangChain message format from session messages."""
+    messages = []
+    for msg in session_messages:
+        role = msg["role"]
+        if role in ("system", "human", "assistant"):
+            messages.append((role, msg["content"]))
+    return messages
+
+def _handle_candidate_closing(session_log: dict, candidate_reply: str, reply_lower: str) -> dict:
+    """Handle candidate-initiated closing scenarios."""
+    if any(p in reply_lower for p in CANDIDATE_EXIT_PHRASES):
+        closing = CLOSING_CANDIDATE_GIVEUP
+        ended_by = "candidate_giveup"
+    elif any(p in reply_lower for p in CANDIDATE_CONFIDENCE_PHRASES):
+        closing = CLOSING_CANDIDATE_CONFIDENT
+        ended_by = "candidate_confident"
+    elif any(p in reply_lower for p in CANDIDATE_COMPLETION_PHRASES):
+        closing = CLOSING_CANDIDATE_COMPLETED
+        ended_by = "candidate_completed"
+    else:
+        return None
+    
+    session_log["exchanges"][-1]["candidate"] = candidate_reply
+    session_log["exchanges"].append({"interviewer": closing})
+    session_log["ended_by"] = ended_by
+    return {
+        "interviewer_question": closing,
+        "is_closing": True,
+        "ended_by": ended_by
+    }
 
 def _synthesize_report(session: dict) -> dict:
     """Build a concise report from the hidden analysis and conversation transcript."""
@@ -64,7 +210,7 @@ def _synthesize_report(session: dict) -> dict:
         isinstance(x.get("candidate"), str) and any(p in x["candidate"].lower() for p in CANDIDATE_EXIT_PHRASES)
         for x in exchanges
     )
-    trivial_pseudo = len(pseudocode) < 10  # essentially empty/near-empty
+    trivial_pseudo = len(pseudocode) < TRIVIAL_PSEUDOCODE_LENGTH
 
     # Stricter hire heuristic
     if gave_up or trivial_pseudo or (classification == "unclear" and not approach):
@@ -92,7 +238,7 @@ def _synthesize_report(session: dict) -> dict:
         "exchanges_count": exchanges_count
     }
 
-def _persist_session(session: dict, report: dict, path: str = "session_logs.jsonl") -> None:
+def _persist_session(session: dict, report: dict, path: str = DEFAULT_SESSION_LOG_PATH) -> None:
     try:
         record = {
             "session": session,
@@ -151,29 +297,12 @@ def final_report(session_index: int = -1, return_dict: bool = False):
     _persist_session(session, report)
 
 
-def get_dsa_question(role: str = "general", difficulty: str = "medium") -> dict:
+def get_dsa_question(role: str = DEFAULT_ROLE, difficulty: str = DEFAULT_DIFFICULTY) -> dict:
     """
     API-friendly wrapper for generate_dsa_question.
     Generates a DSA question and returns it.
     """
     return generate_dsa_question(role=role, difficulty=difficulty)
-
-def _safe_json(text: str):
-    t = text.strip()
-    if t.startswith("```"):
-        parts = t.split("```")
-        if len(parts) >= 3:
-            t = parts[1]
-        else:
-            t = t.strip("`")
-    try:
-        return json.loads(t)
-    except:
-        start = t.find("{")
-        end = t.rfind("}")
-        if start != -1 and end != -1:
-            return json.loads(t[start:end+1])
-        raise
 
 # ---- Role-based topic hints ----
 ROLE_HINTS = {
@@ -185,7 +314,7 @@ ROLE_HINTS = {
     "general": "Focus on common DSA patterns like arrays, recursion, graphs, and dynamic programming."
 }
 
-def generate_dsa_question(role: str = "general", difficulty: str = "easy"):
+def generate_dsa_question(role: str = DEFAULT_ROLE, difficulty: str = "easy"):
     """
     Generates a DSA question suitable for a specific role.
     Returns a JSON dict with structure:
@@ -243,106 +372,44 @@ Return ONLY valid JSON in this exact format
 
 
 
-def analyze_pseudocode_initial(pseudocode: str, question: dict, role: str = "general", difficulty: str = "medium") -> dict:
+def analyze_pseudocode_initial(pseudocode: str, question: dict, role: str = DEFAULT_ROLE, difficulty: str = DEFAULT_DIFFICULTY) -> dict:
     """
     Initialize pseudocode analysis session and get first interviewer question.
     Returns dict with session data and first interviewer question.
     """
     question_json = json.dumps(question, ensure_ascii=False)
     problem_statement = question.get("problem_statement", "")
+    
+    hidden_analysis = _create_hidden_analysis(question_json, problem_statement, pseudocode)
+    interviewer_prompt = _create_interviewer_prompt(question_json, problem_statement, pseudocode)
 
-    # Create a hidden backend analysis (not shown to the user)
-    hidden_prompt = f"""
-You are analyzing a candidate's pseudocode for the following problem. Produce STRICT JSON only.
-
-Question JSON:
-{question_json}
-
-Problem Statement:
-{problem_statement}
-
-Candidate Pseudocode:
-{pseudocode}
-
-Return ONLY valid JSON with keys:
-{{
-  "approach_summary": "string",
-  "time_complexity": "string",
-  "space_complexity": "string",
-  "classification": "brute-force|optimized|unclear",
-  "potential_improvements": ["string", "string"],
-  "edge_cases": ["string", "string"]
-}}
-"""
-
-    hidden_messages = [
-        ("system", "You are a precise algorithm evaluator. Output only valid JSON."),
-        ("human", hidden_prompt),
-    ]
-    try:
-        hidden_resp = llm.invoke(hidden_messages)
-        hidden_analysis = _safe_json(getattr(hidden_resp, "content", str(hidden_resp)))
-    except Exception:
-        hidden_analysis = {
-            "approach_summary": "",
-            "time_complexity": "",
-            "space_complexity": "",
-            "classification": "unclear",
-            "potential_improvements": [],
-            "edge_cases": []
-        }
-
-    # Initialize session log in memory
     session_log = {
         "role": role,
         "difficulty": difficulty,
         "question": question,
         "pseudocode": pseudocode,
         "analysis": hidden_analysis,
-        "exchanges": [],  # [{"interviewer": str, "candidate": str}]
+        "exchanges": [],
         "ended_by": None,
-        "messages": []  # LLM conversation history
+        "messages": []
     }
     session_idx = len(ANALYSIS_LOG)
     ANALYSIS_LOG.append(session_log)
-
-    # Interviewer asks follow-ups
-    interviewer_prompt = f"""
-You are a DSA interviewer evaluating a candidate's pseudocode for the following problem.
-
-Full Question (from generator, JSON):
-{question_json}
-
-Problem Statement (reference):
-{problem_statement}
-
-Candidate's Pseudocode:
-{pseudocode}
-
-Your tasks:
-1) First turn (no candidate reply yet): Ask ONE concise follow-up question. Do NOT reveal any analysis.
-2) Subsequent turns (after the candidate replies): Start with a brief, specific acknowledgment reflecting their last answer (1-2 short sentences), THEN ask exactly ONE follow-up question that ties directly to their response. Do NOT reveal any hidden analysis.
-3) Continue until you feel the candidate has fully addressed concerns, then end with a supportive closing statement.
-Output constraints: On each turn, output ONLY one compact message that is either (a) acknowledgment + one follow-up question, or (b) a closing statement. No extra commentary, no analysis.
-"""
 
     messages = [
         ("system", "You are a senior technical interviewer focusing on algorithms and data structures."),
         ("human", interviewer_prompt),
     ]
 
-    # Get first question
     resp = llm.invoke(messages)
     response = getattr(resp, "content", str(resp)).strip()
     
-    # Save messages to session
     session_log["messages"] = [
         {"role": "system", "content": "You are a senior technical interviewer focusing on algorithms and data structures."},
         {"role": "human", "content": interviewer_prompt},
         {"role": "assistant", "content": response}
     ]
     
-    # Log interviewer question
     session_log["exchanges"].append({"interviewer": response})
     
     return {
@@ -361,84 +428,25 @@ def continue_pseudocode_analysis(session_idx: int, candidate_reply: str) -> dict
         raise ValueError("Invalid session index")
     
     session_log = ANALYSIS_LOG[session_idx]
-    
-    # Check if candidate wants to give up or says they can solve it
     candidate_reply_lower = candidate_reply.strip().lower()
     
-    # Candidate exit phrases (give up)
-    candidate_exit_phrases = [
-        "exit", "quit", "bye", "goodbye", "give up", "i give up", "can't solve", "cannot solve",
-        "stuck", "don't know", "do not know", "not sure", "stop", "end interview"
-    ]
-    
-    # Candidate confidence phrases (I can solve it now)
-    candidate_confidence_phrases = [
-        "yeah now i can", "i can solve", "i can do it", "i got it", "i understand now",
-        "clear now", "makes sense now", "i can solve it now"
-    ]
-    
-    # Candidate completion phrases (I am done)
-    candidate_completion_phrases = [
-        "i am done", "i'm done", "done", "completed", "that's it", "that is it",
-        "finished", "i'm finished", "i am finished", "all done", "i'm all done"
-    ]
-    
-    if any(p in candidate_reply_lower for p in candidate_exit_phrases):
-        closing = "Understood. We'll wrap up here. Thank you for your time and effort today."
-        session_log["exchanges"][-1]["candidate"] = candidate_reply
-        session_log["exchanges"].append({"interviewer": closing})
-        session_log["ended_by"] = "candidate_giveup"
-        return {
-            "interviewer_question": closing,
-            "is_closing": True,
-            "ended_by": "candidate_giveup"
-        }
-    
-    if any(p in candidate_reply_lower for p in candidate_confidence_phrases):
-        closing = "Great! I'm glad things are clearer now. Thank you for working through this with me."
-        session_log["exchanges"][-1]["candidate"] = candidate_reply
-        session_log["exchanges"].append({"interviewer": closing})
-        session_log["ended_by"] = "candidate_confident"
-        return {
-            "interviewer_question": closing,
-            "is_closing": True,
-            "ended_by": "candidate_confident"
-        }
-    
-    if any(p in candidate_reply_lower for p in candidate_completion_phrases):
-        closing = "Excellent! Thank you for completing the pseudocode analysis. We'll wrap up here."
-        session_log["exchanges"][-1]["candidate"] = candidate_reply
-        session_log["exchanges"].append({"interviewer": closing})
-        session_log["ended_by"] = "candidate_completed"
-        return {
-            "interviewer_question": closing,
-            "is_closing": True,
-            "ended_by": "candidate_completed"
-        }
+    # Check for candidate-initiated closing
+    closing_result = _handle_candidate_closing(session_log, candidate_reply, candidate_reply_lower)
+    if closing_result:
+        return closing_result
     
     # Update conversation with candidate reply
     session_log["messages"].append({"role": "human", "content": candidate_reply})
     session_log["exchanges"][-1]["candidate"] = candidate_reply
     
     # Get next interviewer response
-    # Reconstruct messages for LLM
-    messages = []
-    for msg in session_log["messages"]:
-        if msg["role"] == "system":
-            messages.append(("system", msg["content"]))
-        elif msg["role"] == "human":
-            messages.append(("human", msg["content"]))
-        elif msg["role"] == "assistant":
-            messages.append(("assistant", msg["content"]))
-    
+    messages = _reconstruct_messages(session_log["messages"])
     resp = llm.invoke(messages)
     response = getattr(resp, "content", str(resp)).strip()
     
-    # Save response
     session_log["messages"].append({"role": "assistant", "content": response})
     session_log["exchanges"].append({"interviewer": response})
     
-    # Check if interviewer is closing
     is_closing = _is_interviewer_closing(response)
     if is_closing:
         session_log["ended_by"] = "interviewer"
@@ -452,14 +460,10 @@ def continue_pseudocode_analysis(session_idx: int, candidate_reply: str) -> dict
 
 def _is_interviewer_closing(response: str) -> bool:
     """Check if interviewer response contains closing phrases"""
-    interviewer_close_phrases = [
-        "good job", "well done", "thank you", "excellent work", "that's all", "great work",
-        "this concludes", "we're done", "no further questions", "end of interview", "goodbye", "bye"
-    ]
-    return any(phrase in response.lower() for phrase in interviewer_close_phrases)
+    return any(phrase in response.lower() for phrase in INTERVIEWER_CLOSE_PHRASES)
 
 
-def analyze_pseudocode(pseudocode: str, role: str = "general", difficulty: str = "medium") -> int:
+def analyze_pseudocode(pseudocode: str, role: str = DEFAULT_ROLE, difficulty: str = DEFAULT_DIFFICULTY) -> int:
     """
     Analyze a user's pseudocode in the context of a freshly generated algorithm design question.
     The evaluation is conversational (interviewer-style) and will:
@@ -469,98 +473,27 @@ def analyze_pseudocode(pseudocode: str, role: str = "general", difficulty: str =
     
     NOTE: This is the legacy CLI version. Use analyze_pseudocode_initial and continue_pseudocode_analysis for API.
     """
-
-    # Get a question for context so the evaluation is grounded
     question = generate_dsa_question(role=role, difficulty=difficulty)
     question_json = json.dumps(question, ensure_ascii=False)
     problem_statement = question.get("problem_statement", "")
 
-    # Create a hidden backend analysis (not shown to the user)
-    hidden_prompt = f"""
-You are analyzing a candidate's pseudocode for the following problem. Produce STRICT JSON only.
+    hidden_analysis = _create_hidden_analysis(question_json, problem_statement, pseudocode)
+    interviewer_prompt = _create_interviewer_prompt(question_json, problem_statement, pseudocode)
 
-Question JSON:
-{question_json}
-
-Problem Statement:
-{problem_statement}
-
-Candidate Pseudocode:
-{pseudocode}
-
-Return ONLY valid JSON with keys:
-{{
-  "approach_summary": "string",
-  "time_complexity": "string",
-  "space_complexity": "string",
-  "classification": "brute-force|optimized|unclear",
-  "potential_improvements": ["string", "string"],
-  "edge_cases": ["string", "string"]
-}}
-"""
-
-    hidden_messages = [
-        ("system", "You are a precise algorithm evaluator. Output only valid JSON."),
-        ("human", hidden_prompt),
-    ]
-    try:
-        hidden_resp = llm.invoke(hidden_messages)
-        hidden_analysis = _safe_json(getattr(hidden_resp, "content", str(hidden_resp)))
-    except Exception:
-        hidden_analysis = {
-            "approach_summary": "",
-            "time_complexity": "",
-            "space_complexity": "",
-            "classification": "unclear",
-            "potential_improvements": [],
-            "edge_cases": []
-        }
-
-    # Initialize session log in memory
     session_log = {
         "role": role,
         "difficulty": difficulty,
         "question": question,
         "pseudocode": pseudocode,
         "analysis": hidden_analysis,
-        "exchanges": [],  # [{"interviewer": str, "candidate": str}]
+        "exchanges": [],
         "ended_by": None
     }
     ANALYSIS_LOG.append(session_log)
 
-    # Interviewer asks follow-ups; after candidate replies, first acknowledge their response, then ask the next question
-    interviewer_prompt = f"""
-You are a DSA interviewer evaluating a candidate's pseudocode for the following problem.
-
-Full Question (from generator, JSON):
-{question_json}
-
-Problem Statement (reference):
-{problem_statement}
-
-Candidate's Pseudocode:
-{pseudocode}
-
-Your tasks:
-1) First turn (no candidate reply yet): Ask ONE concise follow-up question. Do NOT reveal any analysis.
-2) Subsequent turns (after the candidate replies): Start with a brief, specific acknowledgment reflecting their last answer (1-2 short sentences), THEN ask exactly ONE follow-up question that ties directly to their response. Do NOT reveal any hidden analysis.
-3) Continue until you feel the candidate has fully addressed concerns, then end with a supportive closing statement.
-Output constraints: On each turn, output ONLY one compact message that is either (a) acknowledgment + one follow-up question, or (b) a closing statement. No extra commentary, no analysis.
-"""
-
     messages = [
         ("system", "You are a senior technical interviewer focusing on algorithms and data structures."),
         ("human", interviewer_prompt),
-    ]
-
-    # Closing signals from interviewer or candidate
-    interviewer_close_phrases = [
-        "good job", "well done", "thank you", "excellent work", "that's all", "great work",
-        "this concludes", "we're done", "no further questions", "end of interview", "goodbye", "bye"
-    ]
-    candidate_exit_phrases = [
-        "exit", "quit", "bye", "goodbye", "give up", "i give up", "can't solve", "cannot solve",
-        "stuck", "don't know", "do not know", "not sure", "stop", "end interview"
     ]
 
     while True:
@@ -568,25 +501,23 @@ Output constraints: On each turn, output ONLY one compact message that is either
         response = getattr(resp, "content", str(resp)).strip()
         print("\nInterviewer: " + response)
 
-        # Log interviewer question/closing (candidate reply may be empty on last turn)
         session_log["exchanges"].append({"interviewer": response})
 
-        if any(phrase in response.lower() for phrase in interviewer_close_phrases):
-            # Conversation finished by interviewer
+        if any(phrase in response.lower() for phrase in INTERVIEWER_CLOSE_PHRASES):
             session_log["ended_by"] = "interviewer"
             return len(ANALYSIS_LOG) - 1
+        
         candidate_reply = input("Your answer: ")
-        # Early exit if candidate signals to stop
-        if any(p in candidate_reply.strip().lower() for p in candidate_exit_phrases):
-            closing = "Understood. We'll wrap up here. Thank you for your time and effort today."
-            print("\nInterviewer: " + closing)
-            session_log["exchanges"].append({"interviewer": closing, "candidate": candidate_reply})
+        if any(p in candidate_reply.strip().lower() for p in CANDIDATE_EXIT_PHRASES):
+            print("\nInterviewer: " + CLOSING_CANDIDATE_GIVEUP)
+            session_log["exchanges"].append({"interviewer": CLOSING_CANDIDATE_GIVEUP, "candidate": candidate_reply})
             session_log["ended_by"] = "candidate"
             return len(ANALYSIS_LOG) - 1
-        # Update conversation context and log candidate reply
+        
         messages.append(("assistant", response))
         messages.append(("human", candidate_reply))
         session_log["exchanges"][-1]["candidate"] = candidate_reply
+    
     return len(ANALYSIS_LOG) - 1
 
 

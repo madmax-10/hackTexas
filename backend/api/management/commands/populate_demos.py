@@ -1,22 +1,22 @@
 from django.core.management.base import BaseCommand
-from api.models import Demo
+from api.models import JobDescription
 
 class Command(BaseCommand):
-    help = 'Populate the database with sample demo sessions'
+    help = 'Populate the database with sample job descriptions'
 
     def handle(self, *args, **options):
-        demos_data = [
+        job_descriptions_data = [
             {
-                'title': 'Software Engineer Interview',
-                'description': 'A comprehensive interview session for software engineering positions, covering both technical and behavioral questions.'
+                'title': 'Software Engineering Jobs',
+                'description': 'Practice coding and system design questions for software engineering roles'
             },
             {
-                'title': 'Product Manager Interview',
-                'description': 'Interview session focused on product management skills, strategy, and leadership capabilities.'
+                'title': 'Product Manager Jobs',
+                'description': 'Behavioral and product strategy questions for PM positions'
             },
             {
-                'title': 'Data Scientist Interview',
-                'description': 'Technical interview session covering machine learning, statistics, and data analysis skills.'
+                'title': 'Data Science Jobs',
+                'description': 'Technical and analytical questions for data science roles'
             },
             {
                 'title': 'UX Designer Interview',
@@ -28,20 +28,20 @@ class Command(BaseCommand):
             }
         ]
 
-        for demo_data in demos_data:
-            demo, created = Demo.objects.get_or_create(
-                title=demo_data['title'],
-                defaults={'description': demo_data['description']}
+        for job_data in job_descriptions_data:
+            job, created = JobDescription.objects.get_or_create(
+                title=job_data['title'],
+                defaults={'description': job_data['description']}
             )
             if created:
                 self.stdout.write(
-                    self.style.SUCCESS(f'Created demo: {demo.title}')
+                    self.style.SUCCESS(f'Created job description: {job.title}')
                 )
             else:
                 self.stdout.write(
-                    self.style.WARNING(f'Demo already exists: {demo.title}')
+                    self.style.WARNING(f'Job description already exists: {job.title}')
                 )
 
         self.stdout.write(
-            self.style.SUCCESS('Successfully populated demo sessions!')
+            self.style.SUCCESS('Successfully populated job descriptions!')
         )

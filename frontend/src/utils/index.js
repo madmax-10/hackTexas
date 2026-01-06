@@ -1,4 +1,70 @@
-// Camera utility functions for cleanup across the app
+// Shared utility functions
+
+// ==================== Score & Rating Utilities ====================
+
+/**
+ * Get color based on score
+ */
+export const getScoreColor = (score) => {
+  if (score >= 90 || score >= 8) return '#10b981'; // Green
+  if (score >= 80 || score >= 6) return '#d4af37'; // Gold/Orange
+  if (score >= 70 || score >= 4) return '#f59e0b'; // Orange
+  return '#ef4444'; // Red
+};
+
+/**
+ * Get score label
+ */
+export const getScoreLabel = (score) => {
+  if (score >= 8) return 'Excellent';
+  if (score >= 6) return 'Good';
+  if (score >= 4) return 'Fair';
+  return 'Needs Improvement';
+};
+
+/**
+ * Get rating color
+ */
+export const getRatingColor = (rating) => {
+  switch (rating) {
+    case 'Excellent': return '#10b981';
+    case 'Good': return '#d4af37';
+    case 'Average': return '#f59e0b';
+    default: return '#6b7280';
+  }
+};
+
+/**
+ * Get recommendation color
+ */
+export const getRecommendationColor = (recommendation) => {
+  if (!recommendation) return '#6b7280';
+  const rec = recommendation.toLowerCase();
+  switch (rec) {
+    case 'strong hire': return '#10b981';
+    case 'hire': return '#22c55e';
+    case 'maybe': return '#f59e0b';
+    case 'no hire': return '#ef4444';
+    default: return '#6b7280';
+  }
+};
+
+/**
+ * Get recommendation icon
+ */
+export const getRecommendationIcon = (recommendation) => {
+  if (!recommendation) return '📊';
+  const rec = recommendation.toLowerCase();
+  switch (rec) {
+    case 'strong hire': return '🎉';
+    case 'hire': return '✅';
+    case 'maybe': return '🤔';
+    case 'no hire': return '❌';
+    default: return '📊';
+  }
+};
+
+// ==================== Camera Utilities ====================
 
 /**
  * Stop all camera tracks globally
@@ -104,10 +170,3 @@ export const forceStopAllCameras = () => {
   }
 };
 
-// Export default function for easy import
-export default {
-  stopAllCameras,
-  isCameraActive,
-  getActiveCameraTracks,
-  forceStopAllCameras
-};
