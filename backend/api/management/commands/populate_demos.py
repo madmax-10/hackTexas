@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from api.models import JobDescription
 
+print("!!! LOADED POPULATE DEMOS FROM API APP !!!")  # <--- Add this line
 
 class Command(BaseCommand):
     """Management command to populate job descriptions."""
